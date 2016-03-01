@@ -1,0 +1,50 @@
+设计初衷是：python的logging是线程安全的，但非进程安全的。另外，不同进程操作同一个日志文件而没有任何进程间的同步机制将会导致日志记录混乱。故我们的代码主要是用来解决这些问题的。
+
+这是一个进程、线程安全的日志系统，代码是建立在python logging模块的基础上的。
+unixDomainSocketHandler是继承至logging.Handler的一个UnixDomainSocket的Handler，与之配合的是LoggerServer,loggerServer用于建立一个unix domain socket server用于收集其它进程发来的日志信息，loggerServer本身会打开一个FileHandler用于记录汇集的日志信息。
+
+示例代码如下所示：
+(1)下述代码是多个串行进程向loggerServer发送日志信息
+from mylogger import unixDomainSocketHandler, LoggerServer
+if __name__ == '__main__':
+	pid = os.fork()
+	if pid:
+		num = 0
+		while True:	
+			#print 'log...'
+			#print num
+			logger = logging.getLogger()
+			fd = unixDomainSocketHandler(unixDomainServerPath)
+			fm = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+			fd.setFormatter(fm)
+			logger.addHandler(fd)
+			time.sleep(2)
+			logger.warning(str(num))
+			num = num + 1
+	else:
+		logserver = LoggerServer('mylog.log', unixDomainServerPath)
+		logserver.createLogger()
+		logserver.createLogSource()
+		logserver.servForver()
+
+（2）下述代码是一个进程多次向loggerServer发送日志信息
+if __name__ == '__main__':
+	pid = os.fork()
+	if pid:
+		num = 0
+		logger = logging.getLogger()
+		fd = unixDomainSocketHandler(unixDomainServerPath)
+		fm = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+		fd.setFormatter(fm)
+		logger.addHandler(fd)
+		while True:	
+			#print 'log...'
+			#print num
+			time.sleep(2)
+			logger.warning(str(num))
+			num = num + 1
+	else:
+		logserver = LoggerServer('mylog.log', unixDomainServerPath)
+		logserver.createLogger()
+		logserver.createLogSource()
+		logserver.servForver()
